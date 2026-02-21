@@ -10,8 +10,38 @@
 #include <algorithm>
 using namespace std;
 
+void printVector(const vector<int> vec) {
+    for (int num : vec) {
+        cout << num << " ";
+    }
+    cout << endl;
+}
+
 using NodeID = int; // using er et alias for en anden klasse, så her er NodeID bare en int, men det er nice at have
-using Route = tuple<bool, int, vector<NodeID>>;
+struct Route {
+    bool possible;
+    int distance;
+    vector<NodeID> directions;
+
+    void print () {
+        if (!possible) {
+            cout << "route not possible" << endl;
+        }
+        else {
+            cout << "routing is ";
+            for (int i = 0; i < directions.size(); i++) {
+                cout << directions.at(i);
+                if (i != directions.size() - 1) {   //if not last
+                    cout << " -> ";
+                } 
+                else {
+                    cout << endl;
+                }
+            }
+            
+        }
+    }
+};
 
 enum NodeType {PLATFORM, HOLDING, CROSSING, SIGNAL, JUNCTION};
 
@@ -109,7 +139,75 @@ class TrackGraph {
             }
         }
 
-        Route generateRoute(NodeID from, NodeID to) { //complited, distnace, and route
+        Route generateRoute(NodeID from, NodeID to) {
+
+            map<pair<NodeID,NodeID>,pair<int,vector<NodeID>>> routes; //vi fylder ikke ud, men gør det undervejs i stedet for at lægge alt i med max int
+            vector<pair<NodeID,NodeID>> unexplored;
+            pair<NodeID,NodeID> current; //first = front, second = back
+            bool completed = false;
+
+            while(!completed) {
+
+                //check if we are there
+                if(current.first == to) {
+                    Route returnRoute;
+                    returnRoute.possible = true;
+                    returnRoute.distance = routes.at(current).first;
+                    returnRoute.directions = routes.at(current).second;
+                    return returnRoute;
+                }
+
+                //check edges
+                for(Edge edge: graph_[current.first].edges) {
+                    //nu skal vi tjekke om routen existerer
+                    bool validTransition = true;
+                    bool routeAlreadyMapped = false;
+                    pair<NodeID,NodeID> newNodePair = make_pair(current.first,edge.to);
+                    int distanceForNewPair = routes.at(current).first;
+
+                    //logic here
+
+                    //see if possible
+                    if(validTransition) {
+
+                        //see if better than other
+                        if(distanceForNewPair < routes[newNodePair].first) {
+                            //add route to routes
+                            routes[current].first = distanceForNewPair;
+                            vector<NodeID> newRoute = routes[current].second;
+                            newRoute.push_back(edge.to);
+                            routes[current].second = newRoute;
+
+                            //add new find to unexplored
+                            unexplored.push_back(newNodePair);
+                        }
+                    }
+
+                    
+                }
+                //remove from unexplord
+                auto elementToRemove = find(unexplored.begin(), unexplored.end(), current);
+                unexplored.erase(elementToRemove);
+
+                //check if there is any more land that has not been colonized
+                if
+
+                //shift current
+                pair<NodeID,NodeID> nextElement;
+
+                nextElement = unexplored.at(0);
+
+                for(pair<NodeID,NodeID> nodePair : unexplored) {
+                    if (routes.at(nodePair).first < routes.at(nextElement).first) {
+                        nextElement = nodePair;
+                    }
+                }
+
+                current = nextElement;
+            }
+        }
+
+        Route generateRouteOld_(NodeID from, NodeID to) { //complited, distnace, and route
 
             map<NodeID,pair<int,vector<NodeID>>> routes;
             vector<NodeID> unexplored;
@@ -133,17 +231,31 @@ class TrackGraph {
                     int totalDistance = currentDistance + edge.distance;
                     bool isValidTransition = true;
 
-                    if (routes[edge.to].second.size() > 1) {    //hvis der er mere end en node i routen tjekker vi om den forrige og kommende er en del af valid transitions
-                        NodeID lastNode = routes[edge.to].second.at(routes[edge.to].second.size() -2);   //finder næst sidste node i routen som er den vi er kommet fra.
+                    cout << "standing on " << current << " trying to rout to " << edge.to << endl;
+                    cout << "   route is: ";
+                    printVector(routes[current].second);
+
+                    //check if reversing and possible
+                    if (!graph_[current].reversePossible && edge.to == routes[current].second.at(routes[current].second.size() -1)) {
+                        isValidTransition = false;
+                    }
+
+                    //check if trasition is valid for junction
+                    if (routes[current].second.size() >= 2) {    //hvis der er mere end en node i routen tjekker vi om den forrige og kommende er en del af valid transitions
+                        NodeID lastNode = routes[current].second[routes[current].second.size() -2];   //finder næst sidste node i routen som er den vi er kommet fra.
+
                         for (pair<NodeID,NodeID> invalidTransition : graph_[current].invalidTransitions) {
-                            cout << "checked if " << invalidTransition.first << " + " << invalidTransition.second << " == " << lastNode << " + " << edge.to << "while currrent node is " << current << endl;
+
+                            cout << "   checked if " << invalidTransition.first << " + " << invalidTransition.second << " == " << lastNode << " + " << edge.to << " while currrent node is " << current << endl;
+                            
+
                             if (invalidTransition.first == lastNode && invalidTransition.second == edge.to) {   //hvis det er invalid transition skal vi stoppe:D
                                 isValidTransition = false;
                             }
                         }
                     }
-                    // NodeID previousNode = routes.at(-1)
-                    // make invalid trasitions illigal
+
+                    
 
                     if (totalDistance < routes[edge.to].first && isValidTransition) { //tjekker om der er kortere til end den fundne rute
                         vector<NodeID> newRoute = routes[current].second;   // vi laver ny rute som er identisk til den nuværende
@@ -172,6 +284,8 @@ class TrackGraph {
 
                 current = nextNode;
                 unexplored.erase(remove(unexplored.begin(), unexplored.end(), nextNode), unexplored.end());
+
+                
             }
             return {false,0,{}}; //return statement to make compiler happy
         }
@@ -225,7 +339,7 @@ void createLayout(TrackGraph& track) {
     track.addEdge(j2, c1, 40);
     track.addEdge(c1, j3, 40);
     track.addEdge(j3, h1, 20);
-    track.addEdge(j3, j1, 80);
+    track.addEdge(j3, j1, 15);
     track.addInvalidTransitions(j3,{{h1,j1},{j1,h1}});
 
     cout << "Track layout inserted" << endl;
@@ -309,6 +423,7 @@ int main() {
 
         //Route route = track.generateRoute(stoi(params.at(0)),stoi(params.at(1)));
 
+        cout << "routing from 1 to 6" << endl;
         Route route = track.generateRoute(1,6);
 
         printRoute(route);
