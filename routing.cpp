@@ -18,6 +18,8 @@ void printVector(const vector<int> vec) {
 }
 
 using NodeID = int; // using er et alias for en anden klasse, så her er NodeID bare en int, men det er nice at have
+using TrainID = int;
+
 struct Route {
     bool possible;
     int distance;
@@ -51,8 +53,8 @@ struct Edge {
     bool occupied;
 };
 
-struct Node {
-    NodeID id; //not dumt også at have her når ligger i key, men nice for sikkerhedsskyld
+class Node {
+    NodeID id; //nok dumt også at have her når ligger i key, men nice for sikkerhedsskyld
     string name;
     NodeType type;
     vector<Edge> edges;
@@ -60,7 +62,27 @@ struct Node {
     vector<pair<NodeID,NodeID>> invalidTransitions; //from -> to
 };
 
-using Graph = map<NodeID, Node>;
+class PlatformNode: public Node {
+    
+};
+
+class HoldingNode: public Node {
+
+};
+
+class CrossingNode: public Node {
+    
+};
+
+class SignalNode: public Node {
+    
+};
+
+class JunctionNode: public Node {
+
+};
+
+using Graph = map<NodeID, shared_ptr<Node>>;
 
 //make the graph
 class TrackGraph {
@@ -77,18 +99,33 @@ class TrackGraph {
             optional<vector<pair<NodeID,NodeID>>> invalidTransitions = nullopt
         ) {
             NodeID nodeID = getNewNodeID();
-            Node node = Node();
+            Node node;
         
 
             //name
             if (name != nullopt) {}
             else {
                 switch (type) {
-                    case PLATFORM: name = optional("Platform " + to_string(nodeID)); break;
-                    case HOLDING: name = optional("Holdingtrack " + to_string(nodeID)); break;
-                    case CROSSING: name = optional("Railcrossing " + to_string(nodeID)); break;
-                    case SIGNAL: name = optional("Signal " + to_string(nodeID)); break;
-                    case JUNCTION: name = optional("Junction " + to_string(nodeID)); break;
+                    case PLATFORM: 
+                        name = optional("Platform " + to_string(nodeID));
+                        node = PlatformNode();
+                        break;
+                    case HOLDING: 
+                        name = optional("Holdingtrack " + to_string(nodeID)); 
+                        node = HoldingNode();
+                        break;
+                    case CROSSING: 
+                        name = optional("Railcrossing " + to_string(nodeID)); 
+                        node = CrossingNode();
+                        break;
+                    case SIGNAL: 
+                        name = optional("Signal " + to_string(nodeID)); 
+                        node = SignalNode();
+                        break;
+                    case JUNCTION: 
+                        name = optional("Junction " + to_string(nodeID)); 
+                        node = JunctionNode();
+                        break;
                 }
             }
 
@@ -109,6 +146,8 @@ class TrackGraph {
 
             return nodeID;
         }
+
+        void loadTrackLayoutJSON () {}
 
         void addEdge (NodeID from, NodeID to, float distance) {
             Edge edge = Edge();
@@ -144,9 +183,15 @@ class TrackGraph {
             map<pair<NodeID,NodeID>,pair<int,vector<NodeID>>> routes; //vi fylder ikke ud, men gør det undervejs i stedet for at lægge alt i med max int
             vector<pair<NodeID,NodeID>> unexplored;
             pair<NodeID,NodeID> current; //first = front, second = back
-            bool completed = false;
 
-            while(!completed) {
+            //init
+            current = make_pair(from,from);
+            routes[current].first = 0;
+            routes[current].second = {from};
+            unexplored.push_back(current);
+
+
+            while(true) {
 
                 //check if we are there
                 if(current.first == to) {
@@ -159,38 +204,58 @@ class TrackGraph {
 
                 //check edges
                 for(Edge edge: graph_[current.first].edges) {
+
                     //nu skal vi tjekke om routen existerer
                     bool validTransition = true;
                     bool routeAlreadyMapped = false;
-                    pair<NodeID,NodeID> newNodePair = make_pair(current.first,edge.to);
-                    int distanceForNewPair = routes.at(current).first;
+                    pair<NodeID,NodeID> newNodePair = make_pair(edge.to,current.first);
+                    int distanceForNewPair = routes.at(current).first + edge.distance;
 
                     //logic here
-
-                    //see if possible
-                    if(validTransition) {
-
-                        //see if better than other
-                        if(distanceForNewPair < routes[newNodePair].first) {
-                            //add route to routes
-                            routes[current].first = distanceForNewPair;
-                            vector<NodeID> newRoute = routes[current].second;
-                            newRoute.push_back(edge.to);
-                            routes[current].second = newRoute;
-
-                            //add new find to unexplored
-                            unexplored.push_back(newNodePair);
+                    //check invalid trantions
+                    for (pair<NodeID,NodeID> invalidTranstion : graph_.at(current.first).invalidTransitions) {
+                        pair<NodeID,NodeID> transition = make_pair(current.second,edge.to);
+                        if (transition == invalidTranstion) {
+                            validTransition = false;
                         }
                     }
 
-                    
+                    //check if is reversing without consent
+                    if(!graph_.at(current.first).reversePossible && current.second == edge.to) {
+                        validTransition = false;
+                    }
+
+                    //init for newly found nodes so distance can be max
+                    if (routes.find(newNodePair) == routes.end()) {
+                        routes[newNodePair] = {INT_MAX, {}};
+                    }
+
+                    //see if possible and if better than other
+                    if(distanceForNewPair < routes[newNodePair].first && validTransition) {
+                        //add route to routes
+                        routes[newNodePair].first = distanceForNewPair;
+
+                        vector<NodeID> newRoute = routes[current].second;
+                        newRoute.push_back(edge.to);
+                        routes[newNodePair].second = newRoute;
+
+                        //add new find to unexplored
+                        unexplored.push_back(newNodePair);
+                    }
                 }
+
                 //remove from unexplord
-                auto elementToRemove = find(unexplored.begin(), unexplored.end(), current);
-                unexplored.erase(elementToRemove);
+                unexplored.erase(
+                    remove(unexplored.begin(), unexplored.end(), current),
+                    unexplored.end()
+                );
 
                 //check if there is any more land that has not been colonized
-                if
+                if(unexplored.empty()) {
+                    Route returnRoute;
+                    returnRoute.possible = false;
+                    return returnRoute;
+                }
 
                 //shift current
                 pair<NodeID,NodeID> nextElement;
@@ -310,9 +375,19 @@ class TrackGraph {
     }
 };
 
-class sensor {
+struct Sensor {
     public:
-    bool triggerd = false;
+        bool triggerd = false;
+
+        void update () {
+            if (recentReading != lastReading) {
+                triggerd = true;
+            }
+        };
+    
+    private:
+        bool recentReading = false;
+        bool lastReading = false;
 
     void reset() {
         //wait 1 sec
@@ -320,6 +395,75 @@ class sensor {
     };
 };
 
+class Train {
+    public: 
+        Train(TrainID trainID) { //init function
+            id = trainID;
+            cout << "train added with id: " << id << endl;
+        }
+
+        TrainID id;
+        string name;
+        int defaultSpeed;
+
+        bool inRoute;
+        Route route;
+        
+        //this is according to loaded route
+        NodeID destination;
+        NodeID startLocation;
+
+        // this is according to actual location, no matter route
+        NodeID nextNode;
+        NodeID currentNode;
+
+        void beginRoute () {
+
+            //start train
+
+            inRoute = true;
+        }
+
+        void onRouteCompletion () {}
+
+
+    private:
+        
+};
+
+class TrainManager {
+    public:
+
+        void addTrain (
+            NodeID startingLocation,
+            optional<string> name = nullopt,
+            optional<int> defaultSpeed = nullopt
+        ) {
+            TrainID newTrainID = trains_.size();
+            
+            Train train(newTrainID);
+
+            train.currentNode = startingLocation;
+
+            if (name != nullopt) {
+                train.name = name.value();
+            } else {
+                train.name = "train " + to_string(newTrainID);
+            }
+
+            if (defaultSpeed != nullopt) {
+                train.defaultSpeed = defaultSpeed.value();
+            } else {
+                train.defaultSpeed = standardDefaultSpeed;
+            }
+        }
+
+    private:
+
+        map<TrainID,Train> trains_;
+
+        int standardDefaultSpeed = 20;
+};
 
 void createLayout(TrackGraph& track) {
     int j1 = track.addNode(JUNCTION);
@@ -366,32 +510,6 @@ std::vector<std::string> splitString(const std::string& input, char delimiter) {
     return tokens;
 }
 
-void printRoute(Route route) {
-    //vi slår lige route i stykker, nemere at bruge:D
-    bool success = get<0>(route);
-    int distance = get<1>(route);
-    vector<NodeID> directions = get<2>(route);
-
-    if (!success) {
-        cout << "route not possible" << endl;
-    }
-    else {
-        cout << "routing is ";
-        for (int i = 0; i < directions.size(); i++) {
-            cout << directions.at(i);
-            if (i != directions.size() - 1) {   //if not last
-                cout << " -> ";
-            } 
-            else {
-                cout << endl;
-            }
-        }
-        
-    }
-}
-
-
-
 void loop () {
 
 }
@@ -399,6 +517,7 @@ void loop () {
 int main() {
 
     TrackGraph track;
+    TrainManager trainManager;
 
     createLayout(track);
 
@@ -424,9 +543,9 @@ int main() {
         //Route route = track.generateRoute(stoi(params.at(0)),stoi(params.at(1)));
 
         cout << "routing from 1 to 6" << endl;
-        Route route = track.generateRoute(1,6);
+        Route route = track.generateRoute(2,1);
 
-        printRoute(route);
+        route.print();
 
         done = true;
 
@@ -434,7 +553,6 @@ int main() {
 
     }
 
-    
     // cout << track.getGraph()[0].invalidTransitions.at(0).first << " + " << track.getGraph()[0].invalidTransitions.at(0).second << endl;
 
     //function that generates instructions upon feeding graph and points
