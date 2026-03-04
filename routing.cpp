@@ -105,6 +105,45 @@ class TrackGraph {
             cout << "TrackGraph initialised" << endl;
         }
 
+        void loadTrackLayoutJSON (json layout) {
+            //gå igennem nodes
+            for(const auto& lNode : layout["nodes"]) {
+                
+                NodeType type = getNodeType(lNode["type"]);
+                Node node;
+        
+                switch (type) {
+                    case PLATFORM: 
+                        node = PlatformNode();
+                        break;
+                    case HOLDING: 
+
+                        node = HoldingNode();
+                        break;
+                    case CROSSING: 
+                        node = CrossingNode();
+                        break;
+                    case SIGNAL: 
+                        node = SignalNode();
+                        break;
+                    case JUNCTION: 
+                        node = JunctionNode();
+                        break;
+                }
+            
+                //check om id valid
+                if (graph_.find(lNode["id"]) != graph_.end()) {
+                    NodeID nID = getNewNodeID();
+                    cout << "node id invalid for id: " << lNode["id"] << ". Replacing with " << nID << endl;
+                    node.id = nID;
+                } else {
+                    node.id = lNode["id"];
+                }
+                node.name = lNode["name"];
+                
+            }
+        };
+
         NodeID addNode (
             NodeType type, 
             optional<string> name = nullopt, 
@@ -160,25 +199,6 @@ class TrackGraph {
             return nodeID;
         }
 
-        void loadTrackLayoutJSON (json layout) {
-            //gå igennem nodes
-            for(const auto& lNode : layout["nodes"]) {
-                NodeType type = getNodeType(lNode["type"]);
-                switch (type) {
-                case PLATFORM:
-                    PlatformNode nNode;
-                    //check om id valid
-                    if (graph_.find(lNode["id"]) != graph_.end()) {
-                        NodeID nID = getNewNodeID()
-                        cout << "node id invalid for id: " << lNode["id"] << ". Replacing with " << nID << endl;
-                        nNode.id = nID;
-                    } else {
-                        nNode.id = lNode["id"];
-                    }
-                    nNode.name = lNode["name"];
-
-            }
-        }
 
         void addEdge (NodeID from, NodeID to, float distance) {
             Edge edge = Edge();
