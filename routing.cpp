@@ -8,7 +8,11 @@
 #include <utility>  // for std::pair
 #include <climits> // For INT_MAX
 #include <algorithm>
+#include <fstream>
+#include "json.hpp"
+
 using namespace std;
+using json = nlohmann::json;
 
 void printVector(const vector<int> vec) {
     for (int num : vec) {
@@ -46,6 +50,15 @@ struct Route {
 };
 
 enum NodeType {PLATFORM, HOLDING, CROSSING, SIGNAL, JUNCTION};
+NodeType getNodeType(string type) {
+    transform(type.begin(), type.end(), type.begin(), ::tolower);
+
+    if (type == "platform") return PLATFORM;
+    if (type == "holding")  return HOLDING;
+    if (type == "crossing") return CROSSING;
+    if (type == "signal")   return SIGNAL;
+    if (type == "junction") return JUNCTION;
+}
 
 struct Edge {
     NodeID to;
@@ -54,12 +67,12 @@ struct Edge {
 };
 
 class Node {
+public:
     NodeID id; //nok dumt også at have her når ligger i key, men nice for sikkerhedsskyld
     string name;
     NodeType type;
     vector<Edge> edges;
     bool reversePossible;
-    vector<pair<NodeID,NodeID>> invalidTransitions; //from -> to
 };
 
 class PlatformNode: public Node {
@@ -79,7 +92,7 @@ class SignalNode: public Node {
 };
 
 class JunctionNode: public Node {
-
+    vector<pair<NodeID,NodeID>> invalidTransitions; //from -> to
 };
 
 using Graph = map<NodeID, shared_ptr<Node>>;
@@ -147,7 +160,25 @@ class TrackGraph {
             return nodeID;
         }
 
-        void loadTrackLayoutJSON () {}
+        void loadTrackLayoutJSON (json layout) {
+            //gå igennem nodes
+            for(const auto& lNode : layout["nodes"]) {
+                NodeType type = getNodeType(lNode["type"]);
+                switch (type) {
+                case PLATFORM:
+                    PlatformNode nNode;
+                    //check om id valid
+                    if (graph_.find(lNode["id"]) != graph_.end()) {
+                        NodeID nID = getNewNodeID()
+                        cout << "node id invalid for id: " << lNode["id"] << ". Replacing with " << nID << endl;
+                        nNode.id = nID;
+                    } else {
+                        nNode.id = lNode["id"];
+                    }
+                    nNode.name = lNode["name"];
+
+            }
+        }
 
         void addEdge (NodeID from, NodeID to, float distance) {
             Edge edge = Edge();
@@ -360,19 +391,19 @@ class TrackGraph {
         }
 
     private:
-    Graph graph_;
+        Graph graph_;
 
-    NodeID getNewNodeID () {
-        NodeID newID;
-            if (graph_.empty()) {
-                newID = 0;
-            }
-            else {
-                NodeID lastID = graph_.rbegin()->first;
-                newID = lastID + 1;
-            }
-        return newID;
-    }
+        NodeID getNewNodeID () {
+            NodeID newID;
+                if (graph_.empty()) {
+                    newID = 0;
+                }
+                else {
+                    NodeID lastID = graph_.rbegin()->first;
+                    newID = lastID + 1;
+                }
+            return newID;
+        }
 };
 
 struct Sensor {
@@ -516,48 +547,20 @@ void loop () {
 
 int main() {
 
+    ifstream file("trackLayout.json");
+
+    if (!file) {
+        cerr << "Could not open trackLayout.json\n";
+        return 1;
+    }
+
+    json layoutJson;
+    file >> layoutJson;
+
     TrackGraph track;
     TrainManager trainManager;
 
     createLayout(track);
-
-    // track.printGraph();
-
-    bool done = false;
-
-    while(!done) {
-
-        string input;
-
-        //cin.ignore();
-        //getline(cin,input);
-
-        if(input == "done") {
-            done = true;
-        }
-
-        //vector<string> params = splitString(input,' ');
-
-        //cout << "params is: " << params.at(0) << " and " << params.at(1) << endl;
-
-        //Route route = track.generateRoute(stoi(params.at(0)),stoi(params.at(1)));
-
-        cout << "routing from 1 to 6" << endl;
-        Route route = track.generateRoute(2,1);
-
-        route.print();
-
-        done = true;
-
-        
-
-    }
-
-    // cout << track.getGraph()[0].invalidTransitions.at(0).first << " + " << track.getGraph()[0].invalidTransitions.at(0).second << endl;
-
-    //function that generates instructions upon feeding graph and points
-    //instructions feed to train (via api to microcontroller)
-
 
     return 0;
 }

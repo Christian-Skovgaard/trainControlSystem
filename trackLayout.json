@@ -1,0 +1,89 @@
+{
+    "nodes": [
+        {
+            "id": 0,
+            "type": "junction",
+            "name": "",
+            "reversePossible": false,
+            "invalidTransitions": [
+                {"from": 1, "to": 2},
+                {"from": 2, "to": 1}
+            ],
+            "edges": [
+                {"to": 1, "distance": 10},
+                {"to": 2, "distance": 10},
+                {"to": 5, "distance": 70}
+            ]
+        },
+        {
+            "id": 1,
+            "type": "platform",
+            "name": "",
+            "reversePossible": false,
+            "edges": [
+                {"to": 0, "distance": 10},
+                {"to": 3, "distance": 10}
+            ]
+        },
+        {
+            "id": 2,
+            "type": "platform",
+            "name": "",
+            "reversePossible": false,
+            "edges": [
+                {"to": 0, "distance": 10},
+                {"to": 3, "distance": 10}
+            ]
+        },
+        {
+            "id": 3,
+            "type": "junction",
+            "name": "",
+            "reversePossible": false,
+            "invalidTransitions": [
+                {"from": 1, "to": 2},
+                {"from": 2, "to": 1}
+            ],
+            "edges": [
+                {"to": 1, "distance": 10},
+                {"to": 2, "distance": 10},
+                {"to": 4, "distance": 20}
+            ]
+        },
+        {
+            "id": 4,
+            "type": "crossing",
+            "name": "",
+            "reversePossible": false,
+            "edges": [
+                {"to": 3, "distance": 20},
+                {"to": 5, "distance": 30}
+            ]
+        },
+        {
+            "id": 5,
+            "type": "junction",
+            "name": "",
+            "reversePossible": false,
+            "invalidTransitions": [
+                {"from": 0, "to": 6},
+                {"from": 6, "to": 0}
+            ],
+            "edges": [
+                {"to": 4, "distance": 30},
+                {"to": 0, "distance": 70},
+                {"to": 6, "distance": 30}
+            ]
+        },
+        {
+            "id": 6,
+            "type": "holding",
+            "name": "",
+            "reversePossible": true,
+            "edges": [
+                {"to": 5, "distance": 30}
+            ]
+        }
+        
+    ]
+}
