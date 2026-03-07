@@ -49,7 +49,7 @@ struct Route {
     }
 };
 
-enum NodeType {PLATFORM, HOLDING, CROSSING, SIGNAL, JUNCTION};
+enum NodeType {PLATFORM, HOLDING, CROSSING, SIGNAL, JUNCTION, UNKNOWN};
 NodeType getNodeType(string type) {
     transform(type.begin(), type.end(), type.begin(), ::tolower);
 
@@ -58,12 +58,13 @@ NodeType getNodeType(string type) {
     if (type == "crossing") return CROSSING;
     if (type == "signal")   return SIGNAL;
     if (type == "junction") return JUNCTION;
+    else return UNKNOWN;
 }
 
 struct Edge {
     NodeID to;
     int distance;
-    bool occupied;
+    bool occupied = false;
 };
 
 class Node {
@@ -73,6 +74,16 @@ public:
     NodeType type;
     vector<Edge> edges;
     bool reversePossible;
+
+    virtual bool checkTransition (NodeID from, NodeID to) { //er ikke safe, tjekker ikke om NodeID'erne er en del af edges
+        if (reversePossible) {
+            return true;
+        } else if (from == to && reversePossible == false) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 };
 
 class PlatformNode: public Node {
@@ -92,7 +103,21 @@ class SignalNode: public Node {
 };
 
 class JunctionNode: public Node {
+    public:
     vector<pair<NodeID,NodeID>> invalidTransitions; //from -> to
+
+    bool checkTransition (NodeID from, NodeID to) override { //er ikke safe, tjekker ikke om NodeID'erne er en del af edges
+        for (pair<NodeID,NodeID> invalidTransition : invalidTransitions) {
+            if (invalidTransition.first == from && invalidTransition.second == to) {
+                return false;
+            }
+        }
+        if (!reversePossible && from == to) {
+            return false;
+        } else {
+            return true;
+        }
+    }
 };
 
 using Graph = map<NodeID, shared_ptr<Node>>;
@@ -110,121 +135,76 @@ class TrackGraph {
             for(const auto& lNode : layout["nodes"]) {
                 
                 NodeType type = getNodeType(lNode["type"]);
-                Node node;
+                shared_ptr<Node> node;
         
                 switch (type) {
-                    case PLATFORM: 
-                        node = PlatformNode();
-                        break;
-                    case HOLDING: 
+                    case PLATFORM:
+                    node = make_shared<PlatformNode>();
+                    break;
 
-                        node = HoldingNode();
-                        break;
-                    case CROSSING: 
-                        node = CrossingNode();
-                        break;
-                    case SIGNAL: 
-                        node = SignalNode();
-                        break;
-                    case JUNCTION: 
-                        node = JunctionNode();
-                        break;
+                case HOLDING:
+                    node = make_shared<HoldingNode>();
+                    break;
+
+                case CROSSING:
+                    node = make_shared<CrossingNode>();
+                    break;
+
+                case SIGNAL:
+                    node = make_shared<SignalNode>();
+                    break;
+                case JUNCTION: 
+                    auto jNode = make_shared<JunctionNode>();
+                    for (const auto lTransition : lNode["invalidTransitions"]) {
+                        jNode->invalidTransitions.push_back(make_pair(lTransition["from"],lTransition["to"]));
+                    }
+                    node = jNode;
+                    break;
                 }
             
                 //check om id valid
                 if (graph_.find(lNode["id"]) != graph_.end()) {
                     NodeID nID = getNewNodeID();
                     cout << "node id invalid for id: " << lNode["id"] << ". Replacing with " << nID << endl;
-                    node.id = nID;
+                    node->id = nID;
                 } else {
-                    node.id = lNode["id"];
+                    node->id = lNode["id"];
                 }
-                node.name = lNode["name"];
-                
-            }
-        };
 
-        NodeID addNode (
-            NodeType type, 
-            optional<string> name = nullopt, 
-            optional<bool> reversePossible = nullopt,
-            optional<vector<pair<NodeID,NodeID>>> invalidTransitions = nullopt
-        ) {
-            NodeID nodeID = getNewNodeID();
-            Node node;
-        
-
-            //name
-            if (name != nullopt) {}
-            else {
-                switch (type) {
-                    case PLATFORM: 
-                        name = optional("Platform " + to_string(nodeID));
-                        node = PlatformNode();
-                        break;
-                    case HOLDING: 
-                        name = optional("Holdingtrack " + to_string(nodeID)); 
-                        node = HoldingNode();
-                        break;
-                    case CROSSING: 
-                        name = optional("Railcrossing " + to_string(nodeID)); 
-                        node = CrossingNode();
-                        break;
-                    case SIGNAL: 
-                        name = optional("Signal " + to_string(nodeID)); 
-                        node = SignalNode();
-                        break;
-                    case JUNCTION: 
-                        name = optional("Junction " + to_string(nodeID)); 
-                        node = JunctionNode();
-                        break;
+                //give new name
+                if (lNode["name"].size() == 1) {
+                    cout << "name is empty lol, giving new birth with size: " << lNode["name"].size() << endl;
+                    string typeStr = lNode["type"];
+                    string frontCharStr = typeStr.substr(0,1);
+                    cout << "frontchar: " << frontCharStr << endl;
+                    string nName = frontCharStr + to_string(node->id);
+                    node->name = nName;
+                } else {
+                    node->name = lNode["name"];
+                    cout << "not giving new name with size: " << lNode["name"].size() << endl;
                 }
+
+                node->type = type;
+                node->reversePossible = lNode["reversePossible"];
+                node->edges = {};
+                for (const auto lEdge : lNode["edges"]) {
+                    Edge edge = Edge();
+                    edge.to = lEdge["to"];
+                    edge.distance = lEdge["distance"];
+                    node->edges.push_back(edge);
+                }
+
+                graph_[node->id] = node;
             }
-
-            //reversePossible
-            if (reversePossible != nullopt) {}
-            else if (type == PLATFORM || type == HOLDING) {reversePossible = optional(true);}
-            else {reversePossible = optional(false);}
-
-            node.id = nodeID;
-            node.type = type;
-            node.name = name.value();
-            node.reversePossible = reversePossible.value();
-            if (invalidTransitions != nullopt) {node.invalidTransitions = invalidTransitions.value();}
-
-            graph_[nodeID] = node;
-
-            cout << "node added with id: " << nodeID << " as type: " << type << endl;
-
-            return nodeID;
-        }
-
-
-        void addEdge (NodeID from, NodeID to, float distance) {
-            Edge edge = Edge();
-            edge.distance = distance;
-
-            edge.to = to;
-            graph_[from].edges.push_back(edge);
-
-            edge.to = from;
-            graph_[to].edges.push_back(edge);
-
-            cout << "edge added going from: " << from << " -> " << to << endl;
-        }
-
-        void addInvalidTransitions (NodeID nodeID, vector<pair<NodeID,NodeID>> list) {
-            for (const auto& pair : list) {
-                graph_[nodeID].invalidTransitions.push_back(pair);
-            }
+            cout << "track loaded from file" << endl;
         };
 
         void printGraph () {
             for (const auto& pair : graph_) {
-                cout << pair.second.name << ":" << endl;
-                for (int i=0; i < pair.second.edges.size(); i++) {
-                    Edge current = pair.second.edges.at(i);
-                    cout << "   -> " << graph_[current.to].name << "    dist: " << current.distance << endl;
+                cout << pair.second->name << ":" << endl;
+                for (int i=0; i < pair.second->edges.size(); i++) {
+                    Edge current = pair.second->edges.at(i);
+                    cout << "   -> " << graph_[current.to]->name << "    dist: " << current.distance << endl;
                 }
             }
         }
@@ -254,7 +234,7 @@ class TrackGraph {
                 }
 
                 //check edges
-                for(Edge edge: graph_[current.first].edges) {
+                for(Edge edge: graph_[current.first]->edges) {
 
                     //nu skal vi tjekke om routen existerer
                     bool validTransition = true;
@@ -264,17 +244,7 @@ class TrackGraph {
 
                     //logic here
                     //check invalid trantions
-                    for (pair<NodeID,NodeID> invalidTranstion : graph_.at(current.first).invalidTransitions) {
-                        pair<NodeID,NodeID> transition = make_pair(current.second,edge.to);
-                        if (transition == invalidTranstion) {
-                            validTransition = false;
-                        }
-                    }
-
-                    //check if is reversing without consent
-                    if(!graph_.at(current.first).reversePossible && current.second == edge.to) {
-                        validTransition = false;
-                    }
+                    validTransition = graph_[current.first]->checkTransition(current.second,edge.to);
 
                     //init for newly found nodes so distance can be max
                     if (routes.find(newNodePair) == routes.end()) {
@@ -323,6 +293,7 @@ class TrackGraph {
             }
         }
 
+        /* old route gen
         Route generateRouteOld_(NodeID from, NodeID to) { //complited, distnace, and route
 
             map<NodeID,pair<int,vector<NodeID>>> routes;
@@ -405,6 +376,7 @@ class TrackGraph {
             }
             return {false,0,{}}; //return statement to make compiler happy
         }
+            */
 
         Graph getGraph () {
             return graph_;
@@ -516,30 +488,6 @@ class TrainManager {
         int standardDefaultSpeed = 20;
 };
 
-void createLayout(TrackGraph& track) {
-    int j1 = track.addNode(JUNCTION);
-    int p1 = track.addNode(PLATFORM,"Struer st. spor 1", true);
-    int p2 = track.addNode(PLATFORM,"Struer st. spor 2", true);
-    int j2 = track.addNode(JUNCTION);
-    int c1 = track.addNode(CROSSING);
-    int j3 = track.addNode(JUNCTION);
-    int h1 = track.addNode(HOLDING);
-
-    track.addEdge(j1, p1, 20);
-    track.addEdge(j1, p2, 20);
-    track.addInvalidTransitions(j1,{{p1,p2},{p2,p1}});
-    track.addEdge(p1, j2, 20);
-    track.addEdge(p2, j2, 20);
-    track.addInvalidTransitions(j2,{{p1,p2},{p2,p1}});
-    track.addEdge(j2, c1, 40);
-    track.addEdge(c1, j3, 40);
-    track.addEdge(j3, h1, 20);
-    track.addEdge(j3, j1, 15);
-    track.addInvalidTransitions(j3,{{h1,j1},{j1,h1}});
-
-    cout << "Track layout inserted" << endl;
-};
-
 bool checkIfIntInVector (vector<int> vector, int value) {
     for (int num : vector) {
         if (num == value) {
@@ -574,13 +522,15 @@ int main() {
         return 1;
     }
 
-    json layoutJson;
-    file >> layoutJson;
+    json layoutJSON;
+    file >> layoutJSON;
 
     TrackGraph track;
     TrainManager trainManager;
 
-    createLayout(track);
+    track.loadTrackLayoutJSON(layoutJSON);
+
+    track.printGraph();
 
     return 0;
 }
